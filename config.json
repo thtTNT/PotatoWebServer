@@ -1,0 +1,6 @@
+{
+  "host": "localhost",
+  "port": 3000,
+  "home_page": "index.html",
+  "root_dir": "/Users/tuhaotian/Developer/PotatoWebServer/static"
+}
