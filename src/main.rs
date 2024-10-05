@@ -2,18 +2,19 @@ mod network;
 mod config;
 
 use std::net::{TcpListener, TcpStream};
-use std::io::{BufRead, BufReader, Read, Write};
+use std::io::{BufRead, BufReader};
 use std::thread;
+use crate::network::{FileProxy, HttpStatus};
 
 #[derive(Debug)]
 enum ReadState {
-    Metadata,
+    RequestLine,
     Headers,
     Done,
 }
 
 #[derive(Debug)]
-struct Client {
+struct Request {
     state: ReadState,
     method: Option<String>,
     path: Option<String>,
@@ -21,49 +22,27 @@ struct Client {
     headers: Vec<(String, String)>,
 }
 
-fn handle_request(client: Client, stream: &mut TcpStream) {
+
+fn handle_request(client: Request, stream: &mut TcpStream) {
     let method = client.method.unwrap();
-    let mut path = client.path.unwrap();
+    let original_path = client.path.unwrap();
+    let mut path = original_path.clone();
     let version = client.version.unwrap();
 
-    println!("{} {} {}", method, path, version);
-
     if path.ends_with("/") {
-        path = String::from(path) + &config::Instance::global().home_page;
+        path = String::from(path) + &config::Config::global().home_page;
     }
 
-    path = String::from(&config::Instance::global().root_dir) + &*path;
+    path = String::from(&config::Config::global().root_dir) + &*path;
 
-    let file = std::fs::read(&path).unwrap();
-    let content_length = file.len();
-
-    stream.write_all(b"HTTP/1.1 200 OK\r\n").unwrap();
-    if path.ends_with(".html") {
-        stream.write_all(b"Content-Type: text/html\r\n").unwrap();
-    } else if path.ends_with(".css") {
-        stream.write_all(b"Content-Type: text/css\r\n").unwrap();
-    } else if path.ends_with(".js") {
-        stream.write_all(b"Content-Type: text/javascript\r\n").unwrap();
-    } else if path.ends_with(".jpg") {
-        stream.write_all(b"Content-Type: image/jpeg\r\n").unwrap();
-    } else if path.ends_with(".png") {
-        stream.write_all(b"Content-Type: image/png\r\n").unwrap();
-    } else if path.ends_with(".gif") {
-        stream.write_all(b"Content-Type: image/gif\r\n").unwrap();
-    } else if path.ends_with(".svg") {
-        stream.write_all(b"Content-Type: image/svg+xml\r\n").unwrap();
-    } else {
-        stream.write_all(b"Content-Type: application/octet-stream\r\n").unwrap();
-    }
-    stream.write_all(format!("Content-Length: {}\r\n", content_length).as_bytes()).unwrap();
-    stream.write_all(b"\r\n").unwrap();
-    stream.write_all(&file).unwrap();
-    stream.flush().unwrap();
+    let mut proxy = FileProxy::new(&path);
+    let head = network::response(stream, proxy.as_mut());
+    println!("{} {} {} {} {}", method, original_path, version, head.status.code(), head.status.string());
 }
 
 fn handle_client(mut stream: TcpStream) {
-    let mut client = Client {
-        state: ReadState::Metadata,
+    let mut client = Request {
+        state: ReadState::RequestLine,
         method: None,
         path: None,
         version: None,
@@ -74,7 +53,7 @@ fn handle_client(mut stream: TcpStream) {
         match line {
             Ok(line) => {
                 match client.state {
-                    ReadState::Metadata => {
+                    ReadState::RequestLine => {
                         let parts: Vec<&str> = line.split_whitespace().collect();
                         if parts.len() != 3 {
                             println!("Invalid request line: {}", line);
@@ -118,7 +97,7 @@ fn handle_client(mut stream: TcpStream) {
 }
 
 fn main() {
-    let config = config::Instance::global();
+    let config = config::Config::global();
 
     let ip_address = config.host.clone() + ":" + &config.port.to_string();
     let listener_res = TcpListener::bind(&ip_address);

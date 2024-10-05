@@ -2,5 +2,9 @@
   "host": "localhost",
   "port": 3000,
   "home_page": "index.html",
-  "root_dir": "/Users/tuhaotian/Developer/PotatoWebServer/static"
+  "root_dir": "/Users/tuhaotian/Developer/PotatoWebServer/static",
+  "error_pages": {
+    "404": "/errors/404/main.html",
+    "500": "/errors/500/main.html"
+  }
 }

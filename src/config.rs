@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use serde::Deserialize;
 use std::error::Error;
 use std::fs::File;
@@ -5,18 +6,19 @@ use std::io::BufReader;
 use std::sync::OnceLock;
 
 static CONFIG_PATH: &str = "config.json";
-static CONFIG: OnceLock<Instance> = OnceLock::new();
+static CONFIG: OnceLock<Config> = OnceLock::new();
 
 #[derive(Deserialize, Debug)]
-pub struct Instance {
+pub struct Config {
     pub host: String,
     pub port: u16,
     pub home_page: String,
     pub root_dir: String,
+    pub error_pages: HashMap<String, String>,
 }
 
-impl Instance {
-    pub fn global() -> &'static Instance {
+impl Config {
+    pub fn global() -> &'static Config {
         CONFIG.get_or_init(|| {
             println!("Reading config...");
             let res = read_config();
@@ -29,7 +31,7 @@ impl Instance {
     }
 }
 
-pub fn read_config() -> Result<Instance, Box<dyn Error>> {
+pub fn read_config() -> Result<Config, Box<dyn Error>> {
     let file = File::open(CONFIG_PATH);
     if file.is_err() {
         return Err(Box::new(file.err().unwrap()));
